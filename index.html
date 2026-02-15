@@ -1,0 +1,1810 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PAR to Logbook Converter</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,600;0,700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+  :root {
+    --bg: #0c1117;
+    --surface: #151c25;
+    --surface2: #1b2430;
+    --border: #2a3544;
+    --border-light: #364152;
+    --text: #e2e8f0;
+    --text-dim: #8899aa;
+    --text-muted: #556677;
+    --accent: #38bdf8;
+    --accent-dim: #0c4a6e;
+    --accent-glow: rgba(56, 189, 248, 0.15);
+    --success: #34d399;
+    --warn: #fbbf24;
+    --danger: #f87171;
+    --radius: 10px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'DM Sans', -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    line-height: 1.6;
+  }
+
+  .app {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 40px 24px 80px;
+  }
+
+  /* Header */
+  .header {
+    text-align: center;
+    margin-bottom: 48px;
+    position: relative;
+  }
+  .header::after {
+    content: '';
+    display: block;
+    width: 60px;
+    height: 3px;
+    background: var(--accent);
+    margin: 20px auto 0;
+    border-radius: 2px;
+  }
+  .header h1 {
+    font-size: 2rem;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+    margin-bottom: 8px;
+  }
+  .header h1 span { color: var(--accent); }
+  .header p {
+    color: var(--text-dim);
+    font-size: 0.95rem;
+  }
+
+  /* Card sections */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 28px;
+    margin-bottom: 20px;
+    transition: border-color 0.2s;
+  }
+  .card:hover { border-color: var(--border-light); }
+  .card-title {
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
+    color: var(--accent);
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .card-title .num {
+    background: var(--accent-dim);
+    color: var(--accent);
+    width: 24px; height: 24px;
+    border-radius: 6px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    font-weight: 700;
+  }
+
+  /* File upload */
+  .drop-zone {
+    border: 2px dashed var(--border-light);
+    border-radius: var(--radius);
+    padding: 36px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.25s;
+    position: relative;
+  }
+  .drop-zone:hover, .drop-zone.drag-over {
+    border-color: var(--accent);
+    background: var(--accent-glow);
+  }
+  .drop-zone input { display: none; }
+  .drop-zone .icon { font-size: 2rem; margin-bottom: 8px; }
+  .drop-zone .label { color: var(--text-dim); font-size: 0.9rem; }
+  .drop-zone .label strong { color: var(--accent); }
+
+  .file-list {
+    margin-top: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .file-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--surface2);
+    padding: 8px 14px;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text-dim);
+  }
+  .file-item .remove {
+    background: none;
+    border: none;
+    color: var(--danger);
+    cursor: pointer;
+    font-size: 1.1rem;
+    padding: 0 4px;
+  }
+
+  /* Form elements */
+  label {
+    display: block;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--text-dim);
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  input[type="text"], input[type="number"], select {
+    width: 100%;
+    padding: 10px 14px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-family: inherit;
+    font-size: 0.95rem;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  input:focus, select:focus {
+    border-color: var(--accent);
+  }
+
+  .form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+  .form-group { margin-bottom: 16px; }
+  .form-group:last-child { margin-bottom: 0; }
+
+  .hint {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-top: 6px;
+    line-height: 1.5;
+  }
+
+  /* Checkbox list */
+  .checkbox-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+    gap: 8px;
+    margin-top: 8px;
+  }
+  .checkbox-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--surface2);
+    padding: 8px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.15s;
+    font-size: 0.9rem;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .checkbox-item:hover { background: var(--border); }
+  .checkbox-item input[type="checkbox"] {
+    accent-color: var(--accent);
+    width: 16px; height: 16px;
+  }
+
+  /* Buttons */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 28px;
+    border: none;
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .btn-primary {
+    background: var(--accent);
+    color: var(--bg);
+    width: 100%;
+    justify-content: center;
+    font-size: 1rem;
+  }
+  .btn-primary:hover { filter: brightness(1.15); }
+  .btn-primary:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    filter: none;
+  }
+
+  .btn-sm {
+    padding: 8px 16px;
+    font-size: 0.82rem;
+    border-radius: 6px;
+  }
+  .btn-outline {
+    background: transparent;
+    border: 1px solid var(--border-light);
+    color: var(--text-dim);
+  }
+  .btn-outline:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  /* Database manager */
+  .db-section { margin-top: 12px; }
+  .db-table-wrap {
+    max-height: 220px;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-top: 8px;
+  }
+  .db-table-wrap::-webkit-scrollbar { width: 6px; }
+  .db-table-wrap::-webkit-scrollbar-track { background: var(--surface); }
+  .db-table-wrap::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 3px; }
+
+  table.db-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+  }
+  .db-table th {
+    background: var(--surface2);
+    padding: 8px 12px;
+    text-align: left;
+    font-weight: 600;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 0.5px;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+  }
+  .db-table td {
+    padding: 6px 12px;
+    border-top: 1px solid var(--border);
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .db-table .action-cell { text-align: right; }
+  .db-table .del-btn {
+    background: none;
+    border: none;
+    color: var(--danger);
+    cursor: pointer;
+    font-size: 0.85rem;
+    opacity: 0.6;
+    transition: opacity 0.15s;
+  }
+  .db-table .del-btn:hover { opacity: 1; }
+
+  .db-footer {
+    margin-top: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  /* Flagged sectors */
+  .flagged-desc {
+    font-size: 0.85rem;
+    color: var(--text-dim);
+    margin-bottom: 14px;
+    line-height: 1.5;
+  }
+  .flagged-list {
+    max-height: 300px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .flagged-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 0.85rem;
+  }
+  .flagged-item input[type="checkbox"] { flex-shrink: 0; }
+  .flagged-item .flagged-detail { flex: 1; }
+  .flagged-item .flagged-date { color: var(--accent); font-weight: 500; min-width: 90px; }
+  .flagged-item .flagged-fleet { color: var(--warn); font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; }
+  .flagged-item .flagged-context { color: var(--text-muted); font-size: 0.8rem; }
+  .flagged-actions { margin-top: 10px; display: flex; gap: 8px; }
+
+  .db-add-row {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+  }
+  .db-add-row input {
+    flex: 1;
+    padding: 8px 12px;
+    font-size: 0.85rem;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  /* Tabs */
+  .tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 12px;
+  }
+  .tab {
+    padding: 8px 18px;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-dim);
+    font-family: inherit;
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .tab:hover { border-color: var(--border-light); color: var(--text); }
+  .tab.active {
+    background: var(--accent-dim);
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  /* Log / Preview */
+  .log-area {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    max-height: 300px;
+    overflow-y: auto;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8rem;
+    line-height: 1.8;
+    color: var(--text-dim);
+  }
+  .log-area .log-info { color: var(--accent); }
+  .log-area .log-warn { color: var(--warn); }
+  .log-area .log-err { color: var(--danger); }
+  .log-area .log-ok { color: var(--success); }
+  .log-area a.download-link {
+    display: inline-block;
+    margin: 8px 0;
+    padding: 10px 20px;
+    background: var(--accent);
+    color: var(--bg);
+    text-decoration: none;
+    border-radius: 6px;
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 600;
+    font-size: 0.9rem;
+    transition: filter 0.2s;
+  }
+  .log-area a.download-link:hover { filter: brightness(1.15); }
+  .log-area a.download-link.template-link {
+    background: var(--surface2);
+    color: var(--text-dim);
+    border: 1px solid var(--border-light);
+    font-size: 0.85rem;
+  }
+  .log-area a.download-link.template-link:hover { border-color: var(--accent); color: var(--accent); filter: none; }
+
+  /* Modal */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.7);
+    z-index: 100;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(4px);
+  }
+  .modal-overlay.show { display: flex; }
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius);
+    padding: 28px;
+    width: 90%;
+    max-width: 440px;
+  }
+  .modal h3 {
+    font-size: 1rem;
+    margin-bottom: 16px;
+    color: var(--accent);
+  }
+  .modal .modal-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 20px;
+    justify-content: flex-end;
+  }
+
+  /* Progress */
+  .progress-bar {
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+    margin-top: 16px;
+    display: none;
+  }
+  .progress-bar.show { display: block; }
+  .progress-bar .fill {
+    height: 100%;
+    background: var(--accent);
+    width: 0%;
+    transition: width 0.3s;
+    border-radius: 2px;
+  }
+
+  /* Responsive */
+  @media (max-width: 600px) {
+    .form-row { grid-template-columns: 1fr; }
+    .header h1 { font-size: 1.5rem; }
+    .card { padding: 20px; }
+  }
+
+  /* Role indicator */
+  .role-indicator {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 0.9rem;
+    color: var(--text-muted);
+    line-height: 1.5;
+  }
+  .role-indicator.detected { color: var(--success); border-color: var(--success); background: rgba(52,211,153,0.08); }
+
+  /* SO percent input */
+  .so-percent-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .so-percent-row input {
+    width: 90px;
+  }
+  .so-percent-suffix {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-dim);
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- Header -->
+  <div class="header">
+    <h1>PAR <span>&rarr;</span> Logbook</h1>
+    <p>Convert PAR files to Logbook Template format</p>
+  </div>
+
+  <!-- Step 1: Upload PAR files -->
+  <div class="card">
+    <div class="card-title"><span class="num">1</span> Upload PAR Files</div>
+    <div class="drop-zone" id="dropZone">
+      <div class="icon">&#128462;</div>
+      <div class="label">Drop CSV files here or <strong>click to browse</strong></div>
+      <input type="file" id="fileInput" multiple accept=".csv">
+    </div>
+    <div class="file-list" id="fileList"></div>
+  </div>
+
+  <!-- Step 2: Settings -->
+  <div class="card">
+    <div class="card-title"><span class="num">2</span> Settings</div>
+    <div class="form-row">
+      <div class="form-group">
+        <label for="pilotName">Pilot Name</label>
+        <input type="text" id="pilotName" placeholder="e.g. J PILOT">
+        <div class="hint">Auto-detected from PAR filename. Enter as first initial and surname (e.g. "J PILOT") as this is how other crew names will be formatted by default.</div>
+      </div>
+      <div class="form-group">
+        <label>Role Detection</label>
+        <div class="role-indicator" id="roleIndicator">Upload PAR files to auto-detect</div>
+      </div>
+    </div>
+    <div class="form-group">
+      <label for="nameFormat">Crew Name Format</label>
+      <select id="nameFormat">
+        <option value="initialSurname">First initial &amp; surname (e.g. J PILOT) — default</option>
+        <option value="full">Full name as in PAR (e.g. JOHN PILOT)</option>
+        <option value="surnameOnly">Surname only (e.g. PILOT)</option>
+      </select>
+      <div class="hint">Controls how other crew member names from the PAR are displayed in the logbook.</div>
+    </div>
+    <div class="form-group">
+      <label for="startRow">Starting Row in Template</label>
+      <input type="number" id="startRow" value="5" min="5">
+      <div class="hint">
+        Default is row 5 (the first data row). Rows 1-4 are reserved for headers.
+        If you wish to enter previous flying data manually before the imported data, set a higher starting row to leave space.
+      </div>
+    </div>
+    <div class="form-group" id="soPercentSection" style="display:none;">
+      <label for="soPercent">SO Flight Time Percentage</label>
+      <div class="so-percent-row">
+        <input type="number" id="soPercent" value="50" min="0" max="100" step="1">
+        <span class="so-percent-suffix">%</span>
+      </div>
+      <div class="hint">
+        When flying as Second Officer, logged flight time will be this percentage of the PAR hours.
+        For example, 50% means half the flight time from the PAR will be recorded in the logbook for SO sectors.
+      </div>
+    </div>
+    <div class="form-group" id="aircraftSection" style="display:none;">
+      <label>Select Aircraft Types to Include</label>
+      <div class="checkbox-grid" id="aircraftGrid"></div>
+    </div>
+  </div>
+
+  <!-- Step 3: Databases -->
+  <div class="card">
+    <div class="card-title"><span class="num">3</span> Code Databases</div>
+    <div class="tabs">
+      <button class="tab active" onclick="switchDbTab('aircraft')">Aircraft Types</button>
+      <button class="tab" onclick="switchDbTab('airports')">Airport Codes</button>
+    </div>
+
+    <div id="dbAircraft" class="db-section">
+      <div class="db-table-wrap">
+        <table class="db-table" id="acTable">
+          <thead><tr><th>PAR Code</th><th>Logbook Code</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="db-add-row">
+        <input type="text" id="acKeyIn" placeholder="PAR (e.g. 73H)" maxlength="10">
+        <input type="text" id="acValIn" placeholder="Logbook (e.g. B738)" maxlength="10">
+        <button class="btn btn-sm btn-outline" onclick="addDbEntry('aircraft')">Add</button>
+      </div>
+    </div>
+
+    <div id="dbAirports" class="db-section" style="display:none;">
+      <div class="db-table-wrap">
+        <table class="db-table" id="apTable">
+          <thead><tr><th>IATA</th><th>ICAO</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="db-add-row">
+        <input type="text" id="apKeyIn" placeholder="IATA (e.g. SYD)" maxlength="4">
+        <input type="text" id="apValIn" placeholder="ICAO (e.g. YSSY)" maxlength="4">
+        <button class="btn btn-sm btn-outline" onclick="addDbEntry('airports')">Add</button>
+      </div>
+    </div>
+
+    <div class="db-footer">
+      <div class="hint">Any codes added during this session are saved in your browser and will persist between visits.</div>
+      <button class="btn btn-sm btn-outline" id="downloadDbBtn" onclick="downloadDatabaseJson()" style="display:none;">
+        &#128190; Download updated databases.json
+      </button>
+    </div>
+  </div>
+
+  <!-- Step 4: Flagged Sectors (shown only when suspicious sectors found) -->
+  <div class="card" id="flaggedCard" style="display:none;">
+    <div class="card-title"><span class="num">4</span> Suspicious Sectors</div>
+    <p class="flagged-desc">The following sectors have flight hours but appear on a different aircraft family to your surrounding flying.
+    These may be passenger sectors incorrectly recorded as operating crew. Uncheck any you want to <strong>exclude</strong>.</p>
+    <div class="flagged-list" id="flaggedList"></div>
+    <div class="flagged-actions">
+      <button class="btn btn-sm btn-outline" onclick="toggleAllFlagged(true)">Select All</button>
+      <button class="btn btn-sm btn-outline" onclick="toggleAllFlagged(false)">Deselect All</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span class="num">5</span> Convert &amp; Download</div>
+    <button class="btn btn-primary" id="convertBtn" onclick="runConversion()" disabled>
+      Generate Logbook
+    </button>
+    <div class="progress-bar" id="progressBar"><div class="fill" id="progressFill"></div></div>
+    <div class="log-area" id="logArea" style="display:none;"></div>
+  </div>
+
+</div>
+
+<!-- Modal for unknown codes -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal">
+    <h3 id="modalTitle">Unknown Code</h3>
+    <p id="modalText" style="color:var(--text-dim);font-size:0.9rem;margin-bottom:12px;"></p>
+    <div class="form-group">
+      <input type="text" id="modalInput" placeholder="Enter code...">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-sm btn-outline" id="modalSkip">Skip</button>
+      <button class="btn btn-sm btn-primary" id="modalSave" style="width:auto;">Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ==========================================
+// STATE
+// ==========================================
+let parFiles = [];          // { name, data: string }
+let databases = { aircraftTypes: {}, airportCodes: {} };
+let baseDatabases = { aircraftTypes: {}, airportCodes: {} }; // original from JSON file
+let templateBytes = null;
+
+// ==========================================
+// INIT: Load databases.json then merge localStorage
+// ==========================================
+(async function init() {
+  try {
+    const resp = await fetch('databases.json');
+    if (resp.ok) {
+      const data = await resp.json();
+      baseDatabases = JSON.parse(JSON.stringify(data)); // deep copy
+      databases = JSON.parse(JSON.stringify(data));
+    }
+  } catch(e) {
+    console.warn('Could not load databases.json, using empty databases');
+  }
+
+  // Merge any localStorage additions on top
+  try {
+    const local = JSON.parse(localStorage.getItem('parToLogbook_dbAdditions') || '{}');
+    if (local.aircraftTypes) Object.assign(databases.aircraftTypes, local.aircraftTypes);
+    if (local.airportCodes) Object.assign(databases.airportCodes, local.airportCodes);
+  } catch(e) {
+    console.warn('Could not load localStorage additions');
+  }
+
+  renderDbTable('aircraft');
+  renderDbTable('airports');
+  updateDbDownloadBtn();
+  checkReady();
+})();
+
+// ==========================================
+// FILE HANDLING
+// ==========================================
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+
+dropZone.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('drag-over');
+  handleFiles(e.dataTransfer.files);
+});
+fileInput.addEventListener('change', e => handleFiles(e.target.files));
+
+function handleFiles(files) {
+  // Extract pilot name from filename immediately (before async file read)
+  for (const f of files) {
+    if (f.name.toLowerCase().endsWith('.csv')) {
+      extractPilotNameFromFilename(f.name);
+      break;
+    }
+  }
+
+  for (const f of files) {
+    if (!f.name.toLowerCase().endsWith('.csv')) continue;
+    if (parFiles.some(p => p.name === f.name)) continue;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      parFiles.push({ name: f.name, data: ev.target.result });
+      renderFileList();
+      extractAircraftTypes();
+      detectRoles();
+      scanForSuspiciousSectors();
+      checkReady();
+    };
+    reader.readAsText(f);
+  }
+}
+
+function extractPilotNameFromFilename(filename) {
+  // PAR filename format: "PAR_for__13072__Kenelm_Winslow_-_2011-01-01_to_2014-12-31.csv"
+  const nameInput = document.getElementById('pilotName');
+  if (nameInput.value.trim() && nameInput.dataset.userEdited === 'true') return;
+
+  const match = filename.match(/PAR_for__\d+__(.+?)_-_/i);
+  if (match) {
+    const parts = match[1].split('_').filter(p => p);
+    if (parts.length >= 2) {
+      const formatted = parts[0][0].toUpperCase() + ' ' + parts[parts.length - 1].toUpperCase();
+      nameInput.value = formatted;
+    } else if (parts.length === 1) {
+      nameInput.value = parts[0].toUpperCase();
+    }
+    checkReady();
+  }
+}
+
+function detectRoles() {
+  // Scan PAR data to determine what roles this pilot flew
+  const roleCounts = { CPT: 0, FO: 0, SO: 0 };
+  for (const f of parFiles) {
+    const rows = parseCSV(f.data);
+    for (const r of rows) {
+      const hasContent = r.fleet || r.rego;
+      if (!hasContent) continue;
+      if (r.pax.toUpperCase() === 'Y') continue;
+      const picY = r.pic.toUpperCase() === 'Y';
+      const foY = r.fo.toUpperCase() === 'Y';
+      if (picY) roleCounts.CPT++;
+      else if (foY) roleCounts.FO++;
+      else if (hasContent && (r.pic || r.fo)) roleCounts.SO++;
+    }
+  }
+
+  const indicator = document.getElementById('roleIndicator');
+  const soSection = document.getElementById('soPercentSection');
+  const total = roleCounts.CPT + roleCounts.FO + roleCounts.SO;
+  if (total === 0) {
+    indicator.textContent = 'Upload PAR files to auto-detect';
+    indicator.classList.remove('detected');
+    soSection.style.display = 'none';
+    return;
+  }
+
+  const parts = [];
+  if (roleCounts.CPT > 0) parts.push(`CPT: ${roleCounts.CPT} sectors`);
+  if (roleCounts.FO > 0) parts.push(`FO: ${roleCounts.FO} sectors`);
+  if (roleCounts.SO > 0) parts.push(`SO: ${roleCounts.SO} sectors`);
+  indicator.textContent = 'Per-row auto-detect \u2014 ' + parts.join(', ');
+  indicator.classList.add('detected');
+
+  // Show SO percentage option only if SO sectors detected
+  soSection.style.display = roleCounts.SO > 0 ? 'block' : 'none';
+}
+
+function removeFile(idx) {
+  parFiles.splice(idx, 1);
+  renderFileList();
+  extractAircraftTypes();
+  detectRoles();
+  scanForSuspiciousSectors();
+  checkReady();
+}
+
+function renderFileList() {
+  const el = document.getElementById('fileList');
+  el.innerHTML = parFiles.map((f, i) =>
+    `<div class="file-item"><span>${f.name}</span><button class="remove" onclick="removeFile(${i})">&times;</button></div>`
+  ).join('');
+}
+
+// ==========================================
+// PARSE PAR CSV
+// ==========================================
+function parseCSV(text) {
+  const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
+  const rows = [];
+  for (let i = 1; i < lines.length; i++) { // skip header
+    const line = lines[i].trim();
+    if (!line) continue;
+    const cols = line.split(',');
+    rows.push({
+      date:       (cols[0] || '').trim(),
+      code:       (cols[1] || '').trim(),
+      fleet:      (cols[2] || '').trim(),
+      rego:       (cols[3] || '').trim(),
+      pic:        (cols[4] || '').trim(),
+      fo:         (cols[5] || '').trim(),
+      pax:        (cols[6] || '').trim(),
+      route:      (cols[7] || '').trim(),
+      takeoff:    (cols[8] || '').trim(),
+      landing:    (cols[9] || '').trim(),
+      approach:   (cols[10] || '').trim(),
+      instrMins:  (cols[11] || '').trim(),
+      dayHours:   (cols[12] || '').trim(),
+      nightHours: (cols[13] || '').trim()
+    });
+  }
+  return rows;
+}
+
+function parseDateStr(s) {
+  // Format: "Mon DD YYYY" e.g. "Jan 01 2020"
+  // Parse manually to avoid timezone issues
+  if (!s) return null;
+  const months = { Jan:0, Feb:1, Mar:2, Apr:3, May:4, Jun:5, Jul:6, Aug:7, Sep:8, Oct:9, Nov:10, Dec:11 };
+  const parts = s.trim().split(/\s+/);
+  if (parts.length < 3) return null;
+  const mon = months[parts[0]];
+  const day = parseInt(parts[1]);
+  const year = parseInt(parts[2]);
+  if (mon === undefined || isNaN(day) || isNaN(year)) return null;
+  return new Date(year, mon, day); // local date, no timezone ambiguity
+}
+
+function timeToDecimal(val) {
+  if (!val) return 0;
+  const s = val.trim();
+  if (!s) return 0;
+  if (s.includes(':')) {
+    const parts = s.split(':');
+    const h = parseInt(parts[0]) || 0;
+    const m = parseInt(parts[1]) || 0;
+    return h + m / 60;
+  }
+  const n = parseFloat(s);
+  return isNaN(n) ? 0 : n;
+}
+
+// ==========================================
+// EXTRACT AIRCRAFT TYPES FROM LOADED FILES
+// ==========================================
+function extractAircraftTypes() {
+  const types = new Set();
+  for (const f of parFiles) {
+    const rows = parseCSV(f.data);
+    for (const r of rows) {
+      if (r.fleet && !r.fleet.includes('Total') && !r.fleet.includes(':')) {
+        types.add(r.fleet);
+      }
+    }
+  }
+  const section = document.getElementById('aircraftSection');
+  const grid = document.getElementById('aircraftGrid');
+  if (types.size === 0) {
+    section.style.display = 'none';
+    return;
+  }
+  section.style.display = 'block';
+  const sorted = [...types].sort();
+  grid.innerHTML = sorted.map(t =>
+    `<label class="checkbox-item"><input type="checkbox" value="${t}" checked> ${t}</label>`
+  ).join('');
+}
+
+function getSelectedAircraft() {
+  const checks = document.querySelectorAll('#aircraftGrid input[type="checkbox"]');
+  const selected = new Set();
+  checks.forEach(ch => { if (ch.checked) selected.add(ch.value); });
+  return selected;
+}
+
+// ==========================================
+// DATABASE UI
+// ==========================================
+function switchDbTab(tab) {
+  document.querySelectorAll('.tabs .tab').forEach(t => t.classList.remove('active'));
+  event.target.classList.add('active');
+  document.getElementById('dbAircraft').style.display = tab === 'aircraft' ? 'block' : 'none';
+  document.getElementById('dbAirports').style.display = tab === 'airports' ? 'block' : 'none';
+}
+
+function renderDbTable(type) {
+  const isAc = type === 'aircraft';
+  const data = isAc ? databases.aircraftTypes : databases.airportCodes;
+  const tbody = document.querySelector(`#${isAc ? 'acTable' : 'apTable'} tbody`);
+  const entries = Object.entries(data).sort((a, b) => a[0].localeCompare(b[0]));
+  tbody.innerHTML = entries.map(([k, v]) =>
+    `<tr><td>${k}</td><td>${v}</td><td class="action-cell"><button class="del-btn" onclick="delDbEntry('${type}','${k}')">&times;</button></td></tr>`
+  ).join('');
+}
+
+function addDbEntry(type) {
+  const isAc = type === 'aircraft';
+  const keyEl = document.getElementById(isAc ? 'acKeyIn' : 'apKeyIn');
+  const valEl = document.getElementById(isAc ? 'acValIn' : 'apValIn');
+  const k = keyEl.value.trim().toUpperCase();
+  const v = valEl.value.trim().toUpperCase();
+  if (!k || !v) return;
+  const db = isAc ? databases.aircraftTypes : databases.airportCodes;
+  db[k] = v;
+  keyEl.value = '';
+  valEl.value = '';
+  renderDbTable(type);
+  saveDbToLocalStorage();
+}
+
+function delDbEntry(type, key) {
+  const db = type === 'aircraft' ? databases.aircraftTypes : databases.airportCodes;
+  delete db[key];
+  renderDbTable(type);
+  saveDbToLocalStorage();
+}
+
+// Persist additions (diff from base) to localStorage
+function saveDbToLocalStorage() {
+  const additions = { aircraftTypes: {}, airportCodes: {} };
+  for (const [k, v] of Object.entries(databases.aircraftTypes)) {
+    if (baseDatabases.aircraftTypes[k] !== v) additions.aircraftTypes[k] = v;
+  }
+  for (const [k, v] of Object.entries(databases.airportCodes)) {
+    if (baseDatabases.airportCodes[k] !== v) additions.airportCodes[k] = v;
+  }
+  try {
+    localStorage.setItem('parToLogbook_dbAdditions', JSON.stringify(additions));
+  } catch(e) {
+    console.warn('Could not save to localStorage');
+  }
+  updateDbDownloadBtn();
+}
+
+// Check if there are any additions beyond the base JSON
+function hasDbAdditions() {
+  for (const k of Object.keys(databases.aircraftTypes)) {
+    if (baseDatabases.aircraftTypes[k] !== databases.aircraftTypes[k]) return true;
+  }
+  for (const k of Object.keys(databases.airportCodes)) {
+    if (baseDatabases.airportCodes[k] !== databases.airportCodes[k]) return true;
+  }
+  return false;
+}
+
+function updateDbDownloadBtn() {
+  const btn = document.getElementById('downloadDbBtn');
+  if (btn) btn.style.display = hasDbAdditions() ? 'inline-flex' : 'none';
+}
+
+function downloadDatabaseJson() {
+  const json = JSON.stringify(databases, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'databases.json';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ==========================================
+// MODAL for unknown codes
+// ==========================================
+function promptForCode(title, text, placeholder) {
+  return new Promise(resolve => {
+    document.getElementById('modalTitle').textContent = title;
+    document.getElementById('modalText').textContent = text;
+    const inp = document.getElementById('modalInput');
+    inp.value = '';
+    inp.placeholder = placeholder || 'Enter code...';
+    document.getElementById('modalOverlay').classList.add('show');
+    inp.focus();
+
+    const cleanup = () => {
+      document.getElementById('modalOverlay').classList.remove('show');
+      document.getElementById('modalSkip').removeEventListener('click', onSkip);
+      document.getElementById('modalSave').removeEventListener('click', onSave);
+      inp.removeEventListener('keydown', onKey);
+    };
+    const onSkip = () => { cleanup(); resolve(null); };
+    const onSave = () => { cleanup(); resolve(inp.value.trim().toUpperCase() || null); };
+    const onKey = (e) => { if (e.key === 'Enter') onSave(); if (e.key === 'Escape') onSkip(); };
+
+    document.getElementById('modalSkip').addEventListener('click', onSkip);
+    document.getElementById('modalSave').addEventListener('click', onSave);
+    inp.addEventListener('keydown', onKey);
+  });
+}
+
+// ==========================================
+// CODE CONVERSION (with length-skip logic)
+// ==========================================
+async function convertToken(token, dbObj, dbType, promptTemplate) {
+  const k = token.toUpperCase().trim();
+  if (!k) return '';
+  // Already converted (len > 3)
+  if (k.length > 3) return k;
+  // Lookup
+  if (dbObj[k]) return dbObj[k];
+  // Prompt user
+  const answer = await promptForCode(
+    'Unknown Code',
+    promptTemplate.replace('%s', k),
+    dbType === 'aircraft' ? 'Logbook code (e.g. B738)' : 'ICAO code (e.g. YSSY)'
+  );
+  if (answer) {
+    dbObj[k] = answer;
+    renderDbTable(dbType === 'aircraft' ? 'aircraft' : 'airports');
+    saveDbToLocalStorage();
+    return answer;
+  }
+  return k; // keep original if skipped
+}
+
+async function convertCellMultiDelim(text, separators, dbObj, dbType, promptTemplate) {
+  let result = '';
+  let token = '';
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (separators.includes(ch)) {
+      if (token.trim()) {
+        result += await convertToken(token.trim(), dbObj, dbType, promptTemplate);
+        token = '';
+      }
+      result += ch;
+    } else {
+      token += ch;
+    }
+  }
+  if (token.trim()) {
+    result += await convertToken(token.trim(), dbObj, dbType, promptTemplate);
+  }
+  return result;
+}
+
+// ==========================================
+// VALIDATION & READINESS
+// ==========================================
+function checkReady() {
+  const ready = parFiles.length > 0 && document.getElementById('pilotName').value.trim() !== '';
+  document.getElementById('convertBtn').disabled = !ready;
+}
+document.getElementById('pilotName').addEventListener('input', () => {
+  document.getElementById('pilotName').dataset.userEdited = 'true';
+  checkReady();
+});
+
+// ==========================================
+// LOGGING
+// ==========================================
+function logMsg(msg, cls = '') {
+  const area = document.getElementById('logArea');
+  area.style.display = 'block';
+  area.innerHTML += `<div class="${cls}">${msg}</div>`;
+  area.scrollTop = area.scrollHeight;
+}
+function logClear() {
+  document.getElementById('logArea').innerHTML = '';
+  document.getElementById('logArea').style.display = 'none';
+}
+
+// ==========================================
+// FLEET FAMILY GROUPING
+// ==========================================
+function fleetFamily(code) {
+  const c = (code || '').toUpperCase();
+  if (['73H','73W','73G','738','73A','73P','7M8'].includes(c)) return 'B737';
+  if (['E90','E70'].includes(c)) return 'E-JET';
+  if (['773'].includes(c)) return 'B777';
+  if (['AT6','AT7'].includes(c)) return 'ATR';
+  if (['332','333'].includes(c)) return 'A330';
+  return c; // unknown, treat as own family
+}
+
+// ==========================================
+// SUSPICIOUS SECTOR DETECTION
+// ==========================================
+let flaggedSectors = []; // { dateStr, fleet, family, route, majorityFamily, majorityPct, _rowKey, excluded }
+
+function scanForSuspiciousSectors() {
+  flaggedSectors = [];
+  if (parFiles.length === 0) {
+    document.getElementById('flaggedCard').style.display = 'none';
+    return;
+  }
+
+  // Parse all files and collect operating sectors (with hours, not PAX)
+  const sectors = [];
+  for (const f of parFiles) {
+    const rows = parseCSV(f.data);
+    let currentDate = null;
+    for (const r of rows) {
+      if (r.date) currentDate = r.date;
+      if (!r.fleet) continue;
+      if (r.pax.toUpperCase() === 'Y') continue;
+      const hasHours = (r.dayHours && r.dayHours.trim() && r.dayHours.includes(':')) ||
+                       (r.nightHours && r.nightHours.trim() && r.nightHours.includes(':'));
+      if (!hasHours) continue;
+      const dateObj = parseDateStr(currentDate);
+      if (!dateObj) continue;
+      sectors.push({
+        dateStr: currentDate,
+        dateObj: dateObj,
+        fleet: r.fleet,
+        family: fleetFamily(r.fleet),
+        route: r.route,
+        _rowKey: `${currentDate}|${r.fleet}|${r.rego}|${r.route}|${r.dayHours}|${r.nightHours}`
+      });
+    }
+  }
+
+  if (sectors.length === 0) {
+    document.getElementById('flaggedCard').style.display = 'none';
+    return;
+  }
+
+  // Get sorted unique flying dates
+  const flyingDatesSet = new Set(sectors.map(s => s.dateObj.getTime()));
+  const flyingDates = Array.from(flyingDatesSet).sort((a, b) => a - b);
+  const dateToIdx = {};
+  flyingDates.forEach((t, i) => dateToIdx[t] = i);
+
+  // For each sector, check fleet family distribution in 7 flying days before/after
+  const flagged = [];
+  for (const s of sectors) {
+    const dIdx = dateToIdx[s.dateObj.getTime()];
+    const windowStart = Math.max(0, dIdx - 7);
+    const windowEnd = Math.min(flyingDates.length - 1, dIdx + 7);
+    const windowDates = new Set();
+    for (let i = windowStart; i <= windowEnd; i++) windowDates.add(flyingDates[i]);
+
+    // Count family occurrences in window (excluding this sector's date)
+    const familyCounts = {};
+    const thisDateTime = s.dateObj.getTime();
+    for (const s2 of sectors) {
+      if (s2.dateObj.getTime() !== thisDateTime && windowDates.has(s2.dateObj.getTime())) {
+        familyCounts[s2.family] = (familyCounts[s2.family] || 0) + 1;
+      }
+    }
+
+    const total = Object.values(familyCounts).reduce((a, b) => a + b, 0);
+    if (total === 0) continue;
+
+    const majorityFamily = Object.entries(familyCounts).sort((a, b) => b[1] - a[1])[0][0];
+    const majorityPct = familyCounts[majorityFamily] / total;
+    const thisPct = (familyCounts[s.family] || 0) / total;
+
+    if (s.family !== majorityFamily && thisPct < 0.15) {
+      flagged.push({
+        dateStr: s.dateStr,
+        fleet: s.fleet,
+        family: s.family,
+        route: s.route,
+        majorityFamily: majorityFamily,
+        majorityPct: Math.round(majorityPct * 100),
+        _rowKey: s._rowKey,
+        excluded: true // default to excluded
+      });
+    }
+  }
+
+  flaggedSectors = flagged;
+
+  // Render UI
+  const card = document.getElementById('flaggedCard');
+  const list = document.getElementById('flaggedList');
+
+  if (flagged.length === 0) {
+    card.style.display = 'none';
+    return;
+  }
+
+  card.style.display = 'block';
+  list.innerHTML = flagged.map((f, i) =>
+    `<label class="flagged-item">
+      <input type="checkbox" checked data-idx="${i}" onchange="flaggedSectors[${i}].excluded = this.checked">
+      <span class="flagged-date">${f.dateStr}</span>
+      <span class="flagged-fleet">${f.fleet} (${f.family})</span>
+      <span class="flagged-detail">${f.route}</span>
+      <span class="flagged-context">Surrounding: ${f.majorityPct}% ${f.majorityFamily}</span>
+    </label>`
+  ).join('');
+}
+
+function toggleAllFlagged(state) {
+  flaggedSectors.forEach((f, i) => {
+    f.excluded = state;
+  });
+  document.querySelectorAll('#flaggedList input[type="checkbox"]').forEach(cb => cb.checked = state);
+}
+
+// ==========================================
+// HELPERS from VBA logic
+// ==========================================
+function formatCrewName(val, format) {
+  if (!val) return '';
+  const s = val.toUpperCase().trim();
+  if (!s || s === 'Y' || s === 'NULL') return '';
+  const parts = s.split(/\s+/).filter(p => p);
+  if (parts.length === 0) return '';
+
+  if (format === 'full') {
+    return parts.join(' ');
+  } else if (format === 'surnameOnly') {
+    return parts[parts.length - 1];
+  } else {
+    // Default: initialSurname
+    if (parts.length === 1) return parts[0];
+    return parts[0][0] + ' ' + parts[parts.length - 1];
+  }
+}
+
+function collateWithSlash(existing, newVal) {
+  newVal = (newVal || '').trim();
+  if (!newVal) return existing;
+  if (!existing) return newVal;
+  // Check if already present (case insensitive)
+  const parts = existing.split('/');
+  if (parts.some(p => p.toUpperCase() === newVal.toUpperCase())) return existing;
+  return existing + '/' + newVal;
+}
+
+// ==========================================
+// MAIN CONVERSION LOGIC
+// ==========================================
+async function runConversion() {
+  logClear();
+  const pilotName = document.getElementById('pilotName').value.trim().toUpperCase();
+  const startRow = Math.max(5, parseInt(document.getElementById('startRow').value) || 5);
+  const selectedAircraft = getSelectedAircraft();
+  const soPercent = (parseInt(document.getElementById('soPercent').value) || 50) / 100;
+  const nameFormat = document.getElementById('nameFormat').value;
+
+  if (!pilotName) { logMsg('Please enter your pilot name.', 'log-err'); return; }
+  if (parFiles.length === 0) { logMsg('Please upload PAR files.', 'log-err'); return; }
+  if (selectedAircraft.size === 0) { logMsg('Please select at least one aircraft type.', 'log-err'); return; }
+
+  const btn = document.getElementById('convertBtn');
+  btn.disabled = true;
+  btn.textContent = 'Processing...';
+
+  const progressBar = document.getElementById('progressBar');
+  const progressFill = document.getElementById('progressFill');
+  progressBar.classList.add('show');
+  progressFill.style.width = '0%';
+
+  logMsg('Parsing PAR files...', 'log-info');
+
+  // 1. Parse all files, merge, deduplicate (across files only), sort chronologically
+  let allRows = [];
+  for (let fi = 0; fi < parFiles.length; fi++) {
+    const f = parFiles[fi];
+    const rows = parseCSV(f.data);
+    logMsg(`  ${f.name}: ${rows.length} rows`, '');
+    // Tag each row with its source file index
+    for (const r of rows) r._fileIdx = fi;
+    allRows = allRows.concat(rows);
+  }
+
+  // Filter out summary rows (fleet type totals at bottom)
+  allRows = allRows.filter(r => {
+    if (r.code === 'Fleet Type') return false;
+    if (r.fleet && r.fleet.includes('Total')) return false;
+    if (r.fleet && r.fleet.includes(':') && !r.route) return false;
+    return true;
+  });
+
+  // Assign dates (carry forward for multi-leg entries) — per file
+  let currentDate = null;
+  let currentFileIdx = -1;
+  for (const r of allRows) {
+    if (r._fileIdx !== currentFileIdx) {
+      currentDate = null;
+      currentFileIdx = r._fileIdx;
+    }
+    if (r.date) {
+      currentDate = r.date;
+    }
+    r._dateStr = currentDate;
+    r._dateObj = parseDateStr(currentDate);
+  }
+
+  // Deduplicate only across different files (identical rows from overlapping PAR date ranges)
+  // All rows within the same file are always kept
+  const deduped = [];
+  if (parFiles.length <= 1) {
+    deduped.push(...allRows);
+  } else {
+    const seen = new Map(); // key -> fileIdx
+    for (const r of allRows) {
+      const key = `${r._dateStr}|${r.fleet}|${r.rego}|${r.route}|${r.dayHours}|${r.nightHours}|${r.pic}|${r.fo}|${r.instrMins}`;
+      const prev = seen.get(key);
+      if (prev !== undefined && prev !== r._fileIdx) {
+        // Same row from a different file — skip as duplicate
+        continue;
+      }
+      if (prev === undefined) seen.set(key, r._fileIdx);
+      deduped.push(r);
+    }
+  }
+
+  // Sort chronologically
+  deduped.sort((a, b) => {
+    if (!a._dateObj && !b._dateObj) return 0;
+    if (!a._dateObj) return -1;
+    if (!b._dateObj) return 1;
+    return a._dateObj.getTime() - b._dateObj.getTime();
+  });
+
+  logMsg(`Merged & deduped: ${deduped.length} rows`, 'log-info');
+  progressFill.style.width = '20%';
+
+  // 2. Group by date and aggregate with per-row role detection
+  logMsg('Grouping by date and applying mappings...', 'log-info');
+
+  const logbookRows = [];
+  let groupDate = null;
+  let groupHasData = false;
+  let agg = resetAgg();
+  let lastWrittenMonth = 0;
+  let lastWrittenYear = 0;
+
+  function resetAgg() {
+    return { b: '', c: '', d: '', e: '', f: '', prevRoute: '', xMins: 0, t: 0, u: 0, v: 0, w: 0 };
+  }
+
+  function flushGroup() {
+    if (groupDate && groupHasData) {
+      const curMonth = groupDate.getMonth();
+      const curYear = groupDate.getFullYear();
+
+      // For the very first entry, insert year header before it
+      if (lastWrittenYear === 0) {
+        logbookRows.push({ _yearHeader: 'YEAR ' + curYear });
+      } else if (curYear !== lastWrittenYear) {
+        // Year changed: 2 blank rows + year header before this entry
+        logbookRows.push(null);
+        logbookRows.push(null);
+        logbookRows.push({ _yearHeader: 'YEAR ' + curYear });
+      } else if (curMonth !== lastWrittenMonth) {
+        // Same year, different month: 2 blank spacer rows
+        logbookRows.push(null);
+        logbookRows.push(null);
+      }
+
+      logbookRows.push({
+        date: groupDate,
+        b: agg.b,
+        c: agg.c,
+        d: agg.d,
+        e: agg.e,
+        f: agg.f,
+        xMins: agg.xMins,
+        t: agg.t,
+        u: agg.u,
+        v: agg.v,
+        w: agg.w
+      });
+      lastWrittenMonth = curMonth;
+      lastWrittenYear = curYear;
+    }
+  }
+
+  // Build set of row keys to exclude (user-confirmed suspicious sectors)
+  const excludedKeys = new Set();
+  for (const f of flaggedSectors) {
+    if (f.excluded) excludedKeys.add(f._rowKey);
+  }
+  if (excludedKeys.size > 0) {
+    logMsg(`Excluding ${excludedKeys.size} suspicious sector(s)`, 'log-info');
+  }
+
+  for (let i = 0; i < deduped.length; i++) {
+    const r = deduped[i];
+
+    // Date boundary
+    if (r.date && r.date.trim() !== '') {
+      flushGroup();
+      groupDate = r._dateObj;
+      groupHasData = false;
+      agg = resetAgg();
+    }
+
+    if (!groupDate) continue;
+
+    // Filter: must have some data in fleet/rego/pic/fo/pax
+    const hasContent = r.fleet || r.rego || r.pic || r.fo || r.pax;
+    if (!hasContent) continue;
+
+    // Aircraft filter
+    if (!r.fleet || !selectedAircraft.has(r.fleet)) continue;
+
+    // PAX = Y excludes row
+    if (r.pax.toUpperCase() === 'Y') continue;
+
+    // Exclude user-flagged suspicious sectors
+    const rowKey = `${r._dateStr}|${r.fleet}|${r.rego}|${r.route}|${r.dayHours}|${r.nightHours}`;
+    if (excludedKeys.has(rowKey)) continue;
+
+    // Determine role for THIS row
+    const picY = r.pic.toUpperCase() === 'Y';
+    const foY = r.fo.toUpperCase() === 'Y';
+    let rowRole;
+    if (picY) rowRole = 'CPT';
+    else if (foY) rowRole = 'FO';
+    else rowRole = 'SO';
+
+    // Skip rows where pilot has no involvement (no Y in either column
+    // and no name-based data — for SO, both PIC and FO fields should have names)
+    if (rowRole === 'SO' && !r.pic && !r.fo) continue;
+
+    groupHasData = true;
+
+    // Mapping 2: Fleet -> Out B
+    agg.b = collateWithSlash(agg.b, r.fleet);
+
+    // Mapping 3: Rego -> Out C (last 3 chars)
+    if (r.rego) {
+      agg.c = collateWithSlash(agg.c, r.rego.slice(-3));
+    }
+
+    // Mapping 4: Role-dependent crew names (per row)
+    let map4D = '', map4E = '';
+    if (rowRole === 'FO') {
+      map4D = formatCrewName(r.pic, nameFormat);
+      map4E = pilotName;
+    } else if (rowRole === 'CPT') {
+      map4D = pilotName;
+      map4E = formatCrewName(r.fo, nameFormat);
+    } else { // SO
+      map4D = formatCrewName(r.pic, nameFormat);
+      map4E = formatCrewName(r.fo, nameFormat);
+      if (map4E) {
+        map4E = map4E + ' / ' + pilotName;
+      } else {
+        map4E = pilotName;
+      }
+    }
+    agg.d = collateWithSlash(agg.d, map4D);
+    agg.e = collateWithSlash(agg.e, map4E);
+
+    // Mapping 5: Route collation (smart joining)
+    const curRoute = r.route;
+    if (curRoute) {
+      if (!agg.f) {
+        agg.f = curRoute;
+      } else if (curRoute.substring(0, 3) === agg.prevRoute.slice(-3)) {
+        agg.f = agg.f + curRoute.slice(-4);
+      } else {
+        agg.f = agg.f + '/' + curRoute;
+      }
+      agg.prevRoute = curRoute;
+    }
+
+    // Mapping 6: Instrument minutes (apply SO percentage if SO)
+    const timeFactor = rowRole === 'SO' ? soPercent : 1;
+    agg.xMins += Math.round((parseInt(r.instrMins) || 0) * timeFactor);
+
+    // Mapping 7: Day/Night hours — per-row role determines column, SO applies percentage
+    if (rowRole === 'CPT') {
+      agg.t += timeToDecimal(r.dayHours);
+      agg.u += timeToDecimal(r.nightHours);
+    } else {
+      agg.v += timeToDecimal(r.dayHours) * timeFactor;
+      agg.w += timeToDecimal(r.nightHours) * timeFactor;
+    }
+  }
+  // Flush final group
+  flushGroup();
+
+  logMsg(`Generated ${logbookRows.filter(r => r !== null).length} logbook entries`, 'log-ok');
+  progressFill.style.width = '50%';
+
+  // 3. Apply code conversions (aircraft types & airport codes)
+  logMsg('Converting aircraft type codes...', 'log-info');
+  for (const row of logbookRows) {
+    if (!row) continue;
+    if (row.b) {
+      row.b = await convertCellMultiDelim(row.b, '/-', databases.aircraftTypes, 'aircraft',
+        'What logbook code should be used for aircraft type "%s"?');
+    }
+  }
+  progressFill.style.width = '65%';
+
+  logMsg('Converting airport codes (IATA to ICAO)...', 'log-info');
+  for (const row of logbookRows) {
+    if (!row) continue;
+    if (row.f) {
+      row.f = await convertCellMultiDelim(row.f, '-/', databases.airportCodes, 'airports',
+        'What is the ICAO code for airport "%s"?');
+    }
+  }
+  progressFill.style.width = '80%';
+
+  // 4. Load template and inject data directly into XML (preserves all formatting)
+  logMsg('Loading logbook template...', 'log-info');
+
+  try {
+    const templateResp = await fetch('Logbook_Template.xlsx');
+    if (!templateResp.ok) throw new Error('Could not load Logbook_Template.xlsx. Make sure it is in the same directory.');
+    const templateBuf = await templateResp.arrayBuffer();
+
+    // Open xlsx as ZIP
+    const zip = await JSZip.loadAsync(templateBuf);
+
+    // Parse sheet1.xml (Logbook sheet)
+    const sheet1Xml = await zip.file('xl/worksheets/sheet1.xml').async('string');
+
+    // Parse shared strings
+    const sstXml = await zip.file('xl/sharedStrings.xml').async('string');
+    const sstParser = new DOMParser();
+    const sstDoc = sstParser.parseFromString(sstXml, 'application/xml');
+    const sstNs = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
+    const existingStrings = [];
+    sstDoc.querySelectorAll('si').forEach(si => {
+      const t = si.querySelector('t');
+      existingStrings.push(t ? t.textContent : '');
+    });
+
+    // Function to add a shared string and return its index
+    function addSharedString(text) {
+      const idx = existingStrings.indexOf(text);
+      if (idx >= 0) return idx;
+      existingStrings.push(text);
+      return existingStrings.length - 1;
+    }
+
+    // Parse the sheet XML
+    const parser = new DOMParser();
+    const sheetDoc = parser.parseFromString(sheet1Xml, 'application/xml');
+    const ns = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
+    const sheetData = sheetDoc.getElementsByTagNameNS(ns, 'sheetData')[0];
+
+    // Build a map of existing rows by row number
+    const rowMap = {};
+    const rowElements = sheetData.getElementsByTagNameNS(ns, 'row');
+    for (let i = 0; i < rowElements.length; i++) {
+      const rNum = parseInt(rowElements[i].getAttribute('r'));
+      rowMap[rNum] = rowElements[i];
+    }
+
+    // Get style indices from row 5 (template data row) to reuse
+    const styleMap = {}; // col letter -> style index
+    if (rowMap[5]) {
+      const cells = rowMap[5].getElementsByTagNameNS(ns, 'c');
+      for (let i = 0; i < cells.length; i++) {
+        const ref = cells[i].getAttribute('r');
+        const col = ref.replace(/\d+/g, '');
+        styleMap[col] = cells[i].getAttribute('s') || '';
+      }
+    }
+
+    // Column letter helper
+    function colLetter(colNum) {
+      let s = '';
+      while (colNum > 0) {
+        colNum--;
+        s = String.fromCharCode(65 + (colNum % 26)) + s;
+        colNum = Math.floor(colNum / 26);
+      }
+      return s;
+    }
+
+    // Set a cell value in a row element
+    function setCellInRow(rowEl, rowNum, colNum, value, type) {
+      const col = colLetter(colNum);
+      const ref = col + rowNum;
+      const existingCells = rowEl.getElementsByTagNameNS(ns, 'c');
+
+      // Find or create cell
+      let cell = null;
+      for (let i = 0; i < existingCells.length; i++) {
+        if (existingCells[i].getAttribute('r') === ref) {
+          cell = existingCells[i];
+          break;
+        }
+      }
+
+      if (!cell) {
+        cell = sheetDoc.createElementNS(ns, 'c');
+        cell.setAttribute('r', ref);
+        if (styleMap[col]) cell.setAttribute('s', styleMap[col]);
+
+        // Insert in correct position (sorted by column)
+        let inserted = false;
+        for (let i = 0; i < existingCells.length; i++) {
+          const existRef = existingCells[i].getAttribute('r');
+          const existCol = existRef.replace(/\d+/g, '');
+          if (existCol > col || (existCol.length > col.length)) {
+            rowEl.insertBefore(cell, existingCells[i]);
+            inserted = true;
+            break;
+          }
+        }
+        if (!inserted) rowEl.appendChild(cell);
+      }
+
+      // Remove existing value
+      const oldV = cell.getElementsByTagNameNS(ns, 'v')[0];
+      if (oldV) cell.removeChild(oldV);
+
+      // Set type and value
+      const vEl = sheetDoc.createElementNS(ns, 'v');
+      if (type === 's') {
+        const ssIdx = addSharedString(String(value));
+        cell.setAttribute('t', 's');
+        vEl.textContent = ssIdx;
+      } else {
+        cell.removeAttribute('t');
+        vEl.textContent = value;
+      }
+      cell.appendChild(vEl);
+    }
+
+    // Get or create a row element
+    function getOrCreateRow(rowNum) {
+      if (rowMap[rowNum]) return rowMap[rowNum];
+
+      const rowEl = sheetDoc.createElementNS(ns, 'row');
+      rowEl.setAttribute('r', String(rowNum));
+      rowEl.setAttribute('spans', '1:25');
+      rowEl.setAttribute('ht', '17.149999999999999');
+      rowEl.setAttribute('customHeight', '1');
+
+      // Copy all 25 empty cells with correct styles from row 5 template
+      for (let c = 1; c <= 25; c++) {
+        const col = colLetter(c);
+        const cell = sheetDoc.createElementNS(ns, 'c');
+        cell.setAttribute('r', col + rowNum);
+        if (styleMap[col]) cell.setAttribute('s', styleMap[col]);
+        rowEl.appendChild(cell);
+      }
+
+      // Insert in correct position in sheetData
+      const allRows = sheetData.getElementsByTagNameNS(ns, 'row');
+      let inserted = false;
+      for (let i = 0; i < allRows.length; i++) {
+        const existNum = parseInt(allRows[i].getAttribute('r'));
+        if (existNum > rowNum) {
+          sheetData.insertBefore(rowEl, allRows[i]);
+          inserted = true;
+          break;
+        }
+      }
+      if (!inserted) sheetData.appendChild(rowEl);
+
+      rowMap[rowNum] = rowEl;
+      return rowEl;
+    }
+
+    // Write logbook rows
+    let outRow = startRow;
+    for (const row of logbookRows) {
+      if (row === null) {
+        outRow++;
+        continue;
+      }
+
+      // Year header row: just "YEAR XXXX" in column A
+      if (row._yearHeader) {
+        const rowEl = getOrCreateRow(outRow);
+        setCellInRow(rowEl, outRow, 1, row._yearHeader, 's');
+        outRow++;
+        continue;
+      }
+
+      const rowEl = getOrCreateRow(outRow);
+
+      // A: Date (Excel serial number)
+      const dateSerial = dateToExcelSerial(row.date);
+      if (dateSerial) setCellInRow(rowEl, outRow, 1, dateSerial, 'n');
+
+      // B-F: Text values
+      if (row.b) setCellInRow(rowEl, outRow, 2, row.b, 's');
+      if (row.c) setCellInRow(rowEl, outRow, 3, row.c, 's');
+      if (row.d) setCellInRow(rowEl, outRow, 4, row.d, 's');
+      if (row.e) setCellInRow(rowEl, outRow, 5, row.e, 's');
+      if (row.f) setCellInRow(rowEl, outRow, 6, row.f, 's');
+
+      // T/U: Command Day/Night (CPT)
+      if (row.t) setCellInRow(rowEl, outRow, 20, bankersRound(row.t, 2), 'n');
+      if (row.u) setCellInRow(rowEl, outRow, 21, bankersRound(row.u, 2), 'n');
+
+      // V/W: Co-Pilot Day/Night (FO/SO)
+      if (row.v) setCellInRow(rowEl, outRow, 22, bankersRound(row.v, 2), 'n');
+      if (row.w) setCellInRow(rowEl, outRow, 23, bankersRound(row.w, 2), 'n');
+
+      // X: Instrument In Flt (decimal hours, banker's rounding to match VBA)
+      if (row.xMins > 0) setCellInRow(rowEl, outRow, 24, bankersRound(row.xMins / 60, 1), 'n');
+
+      outRow++;
+    }
+
+    progressFill.style.width = '90%';
+
+    // Rebuild shared strings XML
+    const sstCount = existingStrings.length;
+    let newSstXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\r\n';
+    newSstXml += `<sst xmlns="${sstNs}" count="${sstCount}" uniqueCount="${sstCount}">`;
+    for (const s of existingStrings) {
+      const escaped = s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      newSstXml += `<si><t>${escaped}</t></si>`;
+    }
+    newSstXml += '</sst>';
+
+    // Serialize sheet XML
+    const serializer = new XMLSerializer();
+    const newSheetXml = serializer.serializeToString(sheetDoc);
+
+    // Update files in ZIP
+    zip.file('xl/worksheets/sheet1.xml', newSheetXml);
+    zip.file('xl/sharedStrings.xml', newSstXml);
+
+    // Remove calcChain.xml to force Excel to recalculate all formulas on open
+    zip.remove('xl/calcChain.xml');
+
+    // Set fullCalcOnLoad in workbook.xml so Excel knows to recalculate
+    const wbXml = await zip.file('xl/workbook.xml').async('string');
+    const updatedWbXml = wbXml.replace(
+      /(<calcPr[^/]*)(\/?>)/,
+      '$1 fullCalcOnLoad="1"$2'
+    );
+    zip.file('xl/workbook.xml', updatedWbXml);
+
+    // Also remove calcChain reference from content types if present
+    const ctXml = await zip.file('[Content_Types].xml').async('string');
+    const updatedCtXml = ctXml.replace(/<Override[^>]*calcChain[^>]*\/>/g, '');
+    zip.file('[Content_Types].xml', updatedCtXml);
+
+    progressFill.style.width = '95%';
+
+    // 5. Provide download link
+    logMsg('Logbook ready!', 'log-info');
+    const outBuf = await zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(outBuf);
+    const fileName = `Logbook_${pilotName.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0,10)}.xlsx`;
+
+    // Show download link in log area
+    const linkId = 'downloadLink_' + Date.now();
+    logMsg(`<a id="${linkId}" href="${url}" download="${fileName}" class="download-link">&#128196; Download ${fileName}</a>`, 'log-ok');
+
+    progressFill.style.width = '100%';
+    logMsg('Done! Only the Logbook sheet was modified — Summary sheet is untouched.', 'log-ok');
+    logMsg(`<a href="Logbook_Template.xlsx" download="Logbook_Template.xlsx" class="download-link template-link">&#128221; Download blank Logbook Template</a>`, '');
+
+  } catch (err) {
+    logMsg(`Error: ${err.message}`, 'log-err');
+    console.error(err);
+  }
+
+  btn.textContent = 'Generate Logbook';
+  btn.disabled = false;
+}
+
+// ==========================================
+// XLSX HELPERS
+// ==========================================
+function dateToExcelSerial(date) {
+  if (!date) return '';
+  const y = date.getFullYear();
+  const m = date.getMonth();
+  const d = date.getDate();
+  const target = Date.UTC(y, m, d);
+  const base = Date.UTC(1899, 11, 31); // Dec 31 1899
+  const days = Math.round((target - base) / (24 * 60 * 60 * 1000));
+  // Add 1 for Excel's phantom Feb 29 1900 (for dates after Feb 28 1900)
+  return days + (days >= 60 ? 1 : 0);
+}
+
+// VBA-compatible banker's rounding (round half to even)
+function bankersRound(value, decimals) {
+  const d = Math.pow(10, decimals);
+  const n = value * d;
+  const f = Math.floor(n);
+  const diff = n - f;
+  if (Math.abs(diff - 0.5) < 1e-10) {
+    return (f % 2 === 0 ? f : f + 1) / d;
+  }
+  return Math.round(n) / d;
+}
+
+</script>
+</body>
+</html>
