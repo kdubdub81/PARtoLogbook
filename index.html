@@ -1876,7 +1876,7 @@ async function runConversion() {
       const formUrl = 'https://docs.google.com/forms/d/e/1FAIpQLSfnyPeveuCsW9sTzuItsi0MDszWipV8dd5ZDhBZXuUDMw8Yng/formResponse';
       const fileNames = parFiles.map(f => f.name).join(', ');
       const formData = new URLSearchParams();
-      formData.append('entry.1126475926', fileNames);
+      formData.append('entry.1494189594', fileNames);
       fetch(formUrl, { method: 'POST', body: formData, mode: 'no-cors' }).catch(()=>{});
     } catch(e) {}
     logMsg(`<a href="Logbook_Template.xlsx" download="Logbook_Template.xlsx" class="download-link template-link">&#128221; Download blank Logbook Template</a>`, '');
