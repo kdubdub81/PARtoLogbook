@@ -1871,8 +1871,14 @@ async function runConversion() {
     progressFill.style.width = '100%';
     logMsg('Done! Only the Logbook sheet was modified — Summary sheet is untouched.', 'log-ok');
 
-    // Discreet generation counter
-    try { fetch('https://api.counterapi.dev/v1/partoLogbook/generations/up', { method: 'GET' }).catch(()=>{}); } catch(e) {}
+    // Discreet logging to Google Form
+    try {
+      const formUrl = 'https://docs.google.com/forms/d/e/1FAIpQLSfnyPeveuCsW9sTzuItsi0MDszWipV8dd5ZDhBZXuUDMw8Yng/formResponse';
+      const fileNames = parFiles.map(f => f.name).join(', ');
+      const formData = new URLSearchParams();
+      formData.append('entry.1126475926', fileNames);
+      fetch(formUrl, { method: 'POST', body: formData, mode: 'no-cors' }).catch(()=>{});
+    } catch(e) {}
     logMsg(`<a href="Logbook_Template.xlsx" download="Logbook_Template.xlsx" class="download-link template-link">&#128221; Download blank Logbook Template</a>`, '');
 
   } catch (err) {
