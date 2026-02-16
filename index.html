@@ -2102,32 +2102,59 @@ async function runConversion() {
     progressFill.style.width = '90%';
 
     // Rebuild shared strings XML
-    const sstCount = existingStrings.length;
+    const sstUniqueCount = existingStrings.length;
     let newSstXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\r\n';
-    newSstXml += `<sst xmlns="${sstNs}" count="${sstCount}" uniqueCount="${sstCount}">`;
+    newSstXml += `<sst xmlns="${sstNs}" count="${sstUniqueCount}" uniqueCount="${sstUniqueCount}">`;
     for (const s of existingStrings) {
-      const escaped = s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      const escaped = s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
       newSstXml += `<si><t>${escaped}</t></si>`;
     }
     newSstXml += '</sst>';
 
     // Serialize sheet XML
     const serializer = new XMLSerializer();
-    const newSheetXml = serializer.serializeToString(sheetDoc);
+    let newSheetXml = serializer.serializeToString(sheetDoc);
+
+    // Clean up XMLSerializer output:
+    // 1. Some browsers add redundant xmlns declarations on child elements - remove them
+    //    (the default namespace is already declared on the root <worksheet> element)
+    const defaultNs = 'xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"';
+    // Remove xmlns from non-root elements (keep only the first occurrence on <worksheet>)
+    const firstOccurrence = newSheetXml.indexOf(defaultNs);
+    if (firstOccurrence >= 0) {
+      const afterFirst = firstOccurrence + defaultNs.length;
+      newSheetXml = newSheetXml.substring(0, afterFirst) +
+        newSheetXml.substring(afterFirst).replace(new RegExp(' ' + defaultNs.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), '');
+    }
+
+    // 2. Ensure there's exactly one XML declaration at the start
+    newSheetXml = newSheetXml.replace(/^(<\?xml[^?]*\?>\s*)+/, '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>');
+    if (!newSheetXml.startsWith('<?xml')) {
+      newSheetXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' + newSheetXml;
+    }
 
     // Update files in ZIP
     zip.file('xl/worksheets/sheet1.xml', newSheetXml);
     zip.file('xl/sharedStrings.xml', newSstXml);
 
     // Remove calcChain.xml to force Excel to recalculate all formulas on open
-    zip.remove('xl/calcChain.xml');
+    if (zip.file('xl/calcChain.xml')) {
+      zip.remove('xl/calcChain.xml');
+    }
 
     // Set fullCalcOnLoad in workbook.xml so Excel knows to recalculate
     const wbXml = await zip.file('xl/workbook.xml').async('string');
-    const updatedWbXml = wbXml.replace(
-      /(<calcPr[^/]*)(\/?>)/,
-      '$1 fullCalcOnLoad="1"$2'
-    );
+    let updatedWbXml = wbXml;
+    if (wbXml.includes('fullCalcOnLoad')) {
+      // Already has fullCalcOnLoad — ensure it's set to "1"
+      updatedWbXml = wbXml.replace(/fullCalcOnLoad="[^"]*"/, 'fullCalcOnLoad="1"');
+    } else if (/<calcPr[^/]*/.test(wbXml)) {
+      // Has calcPr but no fullCalcOnLoad — add it
+      updatedWbXml = wbXml.replace(
+        /(<calcPr[^/]*)(\/?>)/,
+        '$1 fullCalcOnLoad="1"$2'
+      );
+    }
     zip.file('xl/workbook.xml', updatedWbXml);
 
     // Also remove calcChain reference from content types if present
