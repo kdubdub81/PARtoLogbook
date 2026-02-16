@@ -597,6 +597,14 @@
   }
   .role-indicator.detected { color: var(--success); border-color: var(--success); background: rgba(52,211,153,0.08); }
 
+  /* Dimmed non-dominant aircraft types */
+  .ac-dim {
+    opacity: 0.5;
+  }
+  .ac-dim:hover {
+    opacity: 0.8;
+  }
+
   /* SO percent input */
   .so-percent-row {
     display: flex;
@@ -720,6 +728,7 @@
     </div>
     <div class="form-group" id="aircraftSection" style="display:none;">
       <label>Select Aircraft Types to Include</label>
+      <div class="hint" id="acTypeHint" style="margin-bottom:8px;display:none;"></div>
       <div class="checkbox-grid" id="aircraftGrid"></div>
     </div>
   </div>
@@ -771,8 +780,8 @@
   <!-- Step 4: Flagged Sectors (shown only when suspicious sectors found) -->
   <div class="card" id="flaggedCard" style="display:none;">
     <div class="card-title"><span class="num">4</span> Suspicious Sectors</div>
-    <p class="flagged-desc">The following sectors have flight hours but appear on a different aircraft family to your surrounding flying.
-    These may be passenger sectors incorrectly recorded as operating crew. Uncheck any you want to <strong>exclude</strong>.</p>
+    <p class="flagged-desc">The following individual sectors have flight hours but appear on a different aircraft family to your surrounding flying.
+    These are likely passenger sectors incorrectly recorded as operating crew. They are <strong>checked for exclusion</strong> by default — uncheck any you want to keep.</p>
     <div class="flagged-list" id="flaggedList"></div>
     <div class="flagged-actions">
       <button class="btn btn-sm btn-outline" onclick="toggleAllFlagged(true)">Select All</button>
@@ -1064,26 +1073,81 @@ function timeToDecimal(val) {
 // EXTRACT AIRCRAFT TYPES FROM LOADED FILES
 // ==========================================
 function extractAircraftTypes() {
-  const types = new Set();
+  // Count operating sectors (with hours, not PAX) per fleet code
+  const operatingCounts = {};  // fleet -> count of operating sectors
+  const allTypes = new Set();
   for (const f of parFiles) {
     const rows = parseCSV(f.data);
     for (const r of rows) {
       if (r.fleet && !r.fleet.includes('Total') && !r.fleet.includes(':')) {
-        types.add(r.fleet);
+        allTypes.add(r.fleet);
+        // Count operating sectors only (has hours, not PAX=Y)
+        if (r.pax && r.pax.toUpperCase() === 'Y') continue;
+        const hasHours = (r.dayHours && r.dayHours.trim() && r.dayHours.includes(':')) ||
+                         (r.nightHours && r.nightHours.trim() && r.nightHours.includes(':'));
+        if (hasHours) {
+          operatingCounts[r.fleet] = (operatingCounts[r.fleet] || 0) + 1;
+        }
       }
     }
   }
   const section = document.getElementById('aircraftSection');
   const grid = document.getElementById('aircraftGrid');
-  if (types.size === 0) {
+  if (allTypes.size === 0) {
     section.style.display = 'none';
     return;
   }
   section.style.display = 'block';
-  const sorted = [...types].sort();
-  grid.innerHTML = sorted.map(t =>
-    `<label class="checkbox-item"><input type="checkbox" value="${t}" checked> ${t}</label>`
-  ).join('');
+
+  // Determine dominant fleet family from operating sectors
+  const familyCounts = {};
+  for (const [fleet, count] of Object.entries(operatingCounts)) {
+    const fam = fleetFamily(fleet);
+    familyCounts[fam] = (familyCounts[fam] || 0) + count;
+  }
+  const totalOperating = Object.values(familyCounts).reduce((a, b) => a + b, 0);
+  const dominantFamilies = new Set();
+  for (const [fam, count] of Object.entries(familyCounts)) {
+    // A family is "dominant" (likely endorsed/operating) if it has enough sectors.
+    // Use both a count minimum and a percentage floor:
+    // - At least 20 operating sectors, OR
+    // - More than 10% of total operating sectors
+    // This catches both high-volume types and smaller-fleet scenarios.
+    if (count >= 20 || count / totalOperating >= 0.10) dominantFamilies.add(fam);
+  }
+
+  // Store for use by suspicious sector detection
+  window._dominantFamilies = dominantFamilies;
+  window._operatingCounts = operatingCounts;
+  window._familyCounts = familyCounts;
+  window._totalOperating = totalOperating;
+
+  const sorted = [...allTypes].sort();
+  grid.innerHTML = sorted.map(t => {
+    const fam = fleetFamily(t);
+    const isDominant = dominantFamilies.has(fam);
+    const opCount = operatingCounts[t] || 0;
+    // Auto-uncheck types from non-dominant families
+    const checked = isDominant ? 'checked' : '';
+    const dimClass = isDominant ? '' : ' ac-dim';
+    const countLabel = opCount > 0 ? ` (${opCount})` : ' (PAX only)';
+    return `<label class="checkbox-item${dimClass}"><input type="checkbox" value="${t}" ${checked}> ${t}${countLabel}</label>`;
+  }).join('');
+
+  // Show hint about auto-uncheck
+  const hint = document.getElementById('acTypeHint');
+  const nonDomFamilies = Object.entries(familyCounts)
+    .filter(([fam]) => !dominantFamilies.has(fam))
+    .map(([fam, count]) => `${fam} (${count})`);
+  if (nonDomFamilies.length > 0) {
+    const domNames = [...dominantFamilies].join(', ');
+    hint.innerHTML = `Your operating flying is predominantly <strong>${domNames}</strong>. ` +
+      `Types from other fleet families (${nonDomFamilies.join(', ')}) have been auto-deselected — ` +
+      `these are likely deadhead or positioning sectors. Re-check any you want to include.`;
+    hint.style.display = 'block';
+  } else {
+    hint.style.display = 'none';
+  }
 }
 
 function getSelectedAircraft() {
