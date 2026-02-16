@@ -728,7 +728,6 @@
     </div>
     <div class="form-group" id="aircraftSection" style="display:none;">
       <label>Select Aircraft Types to Include</label>
-      <div class="hint" id="acTypeHint" style="margin-bottom:8px;display:none;"></div>
       <div class="checkbox-grid" id="aircraftGrid"></div>
     </div>
   </div>
@@ -1099,55 +1098,13 @@ function extractAircraftTypes() {
   }
   section.style.display = 'block';
 
-  // Determine dominant fleet family from operating sectors
-  const familyCounts = {};
-  for (const [fleet, count] of Object.entries(operatingCounts)) {
-    const fam = fleetFamily(fleet);
-    familyCounts[fam] = (familyCounts[fam] || 0) + count;
-  }
-  const totalOperating = Object.values(familyCounts).reduce((a, b) => a + b, 0);
-  const dominantFamilies = new Set();
-  for (const [fam, count] of Object.entries(familyCounts)) {
-    // A family is "dominant" (likely endorsed/operating) if it has enough sectors.
-    // Use both a count minimum and a percentage floor:
-    // - At least 20 operating sectors, OR
-    // - More than 10% of total operating sectors
-    // This catches both high-volume types and smaller-fleet scenarios.
-    if (count >= 20 || count / totalOperating >= 0.10) dominantFamilies.add(fam);
-  }
-
-  // Store for use by suspicious sector detection
-  window._dominantFamilies = dominantFamilies;
-  window._operatingCounts = operatingCounts;
-  window._familyCounts = familyCounts;
-  window._totalOperating = totalOperating;
-
   const sorted = [...allTypes].sort();
   grid.innerHTML = sorted.map(t => {
-    const fam = fleetFamily(t);
-    const isDominant = dominantFamilies.has(fam);
     const opCount = operatingCounts[t] || 0;
-    // Auto-uncheck types from non-dominant families
-    const checked = isDominant ? 'checked' : '';
-    const dimClass = isDominant ? '' : ' ac-dim';
     const countLabel = opCount > 0 ? ` (${opCount})` : ' (PAX only)';
-    return `<label class="checkbox-item${dimClass}"><input type="checkbox" value="${t}" ${checked}> ${t}${countLabel}</label>`;
+    const dimClass = opCount === 0 ? ' ac-dim' : '';
+    return `<label class="checkbox-item${dimClass}"><input type="checkbox" value="${t}" checked> ${t}${countLabel}</label>`;
   }).join('');
-
-  // Show hint about auto-uncheck
-  const hint = document.getElementById('acTypeHint');
-  const nonDomFamilies = Object.entries(familyCounts)
-    .filter(([fam]) => !dominantFamilies.has(fam))
-    .map(([fam, count]) => `${fam} (${count})`);
-  if (nonDomFamilies.length > 0) {
-    const domNames = [...dominantFamilies].join(', ');
-    hint.innerHTML = `Your operating flying is predominantly <strong>${domNames}</strong>. ` +
-      `Types from other fleet families (${nonDomFamilies.join(', ')}) have been auto-deselected — ` +
-      `these are likely deadhead or positioning sectors. Re-check any you want to include.`;
-    hint.style.display = 'block';
-  } else {
-    hint.style.display = 'none';
-  }
 }
 
 function getSelectedAircraft() {
